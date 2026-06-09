@@ -1,0 +1,174 @@
+// ==UserScript==
+// @name         Auto Click DragonBall - 5 Luồng
+// @namespace    http://tampermonkey.net/
+// @version      41.0
+// @description  Chạy 5 luồng auto click, có bảng điều khiển
+// @author       AutoClicker
+// @match        *://dragonballh5.com/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // Đợi trang load xong
+    window.addEventListener('load', function() {
+        console.log("%c🚀 KHỞI ĐỘNG 5 LUỒNG", "color: #ff9800; font-size: 16px");
+
+        // ========== TẠO BẢNG ĐIỀU KHIỂN ==========
+        const panel = document.createElement('div');
+        panel.id = 'master-panel';
+        panel.innerHTML = `
+            <div style="
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                z-index: 999999;
+                background: rgba(0,0,0,0.9);
+                border-radius: 12px;
+                padding: 10px;
+                font-family: monospace;
+                font-size: 11px;
+                color: white;
+                border: 1px solid #ff9800;
+                min-width: 200px;
+                cursor: move;
+            ">
+                <div style="font-weight: bold; margin-bottom: 8px; color: #ff9800;">🎮 5 LUỒNG CLICK</div>
+                <div id="thread-status" style="font-size: 10px;">Đang khởi tạo...</div>
+                <div style="margin-top: 8px; display: flex; gap: 8px;">
+                    <button id="pause-all" style="background: #ff5722; border: none; color: white; padding: 4px 10px; border-radius: 4px; cursor: pointer;">⏸ Dừng</button>
+                    <button id="resume-all" style="background: #4CAF50; border: none; color: white; padding: 4px 10px; border-radius: 4px; cursor: pointer;">▶ Play</button>
+                    <button id="reset-all" style="background: #2196F3; border: none; color: white; padding: 4px 10px; border-radius: 4px; cursor: pointer;">⟳ Reset</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+
+        // Kéo thả panel
+        let isDragging = false;
+        let dragStartX, dragStartY;
+        panel.addEventListener('mousedown', function(e) {
+            if (e.target.tagName === 'BUTTON') return;
+            isDragging = true;
+            dragStartX = e.clientX - panel.offsetLeft;
+            dragStartY = e.clientY - panel.offsetTop;
+            panel.style.cursor = 'grabbing';
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            let left = e.clientX - dragStartX;
+            let top = e.clientY - dragStartY;
+            left = Math.max(0, Math.min(left, window.innerWidth - panel.offsetWidth));
+            top = Math.max(0, Math.min(top, window.innerHeight - panel.offsetHeight));
+            panel.style.left = left + 'px';
+            panel.style.top = top + 'px';
+            panel.style.bottom = 'auto';
+        });
+        document.addEventListener('mouseup', function() {
+            isDragging = false;
+            panel.style.cursor = 'move';
+        });
+
+        // ========== TẠO USERNAME ==========
+        function randomUserName() {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < 10; i++) result += chars[Math.floor(Math.random() * chars.length)];
+            return result;
+        }
+
+        // ========== LỚP LUỒNG ==========
+        class ClickThread {
+            constructor(id) {
+                this.id = id;
+                this.userName = randomUserName();
+                this.isRunning = true;
+                this.currentStep = 0;
+                console.log(`✅ Luồng ${id+1} tạo - User: ${this.userName}`);
+            }
+
+            log(msg) {
+                console.log(`[Luồng ${this.id+1}] ${msg}`);
+            }
+
+            click(x, y, name) {
+                const el = document.elementFromPoint(x, y);
+                if (!el) return false;
+                const rx = x + (Math.random() - 0.5) * 4;
+                const ry = y + (Math.random() - 0.5) * 4;
+                ['mousedown', 'mouseup', 'click'].forEach(type => {
+                    el.dispatchEvent(new MouseEvent(type, { view: window, bubbles: true, clientX: rx, clientY: ry, button: 0 }));
+                });
+                this.log(`Click ${name} tại (${x},${y})`);
+                return true;
+            }
+
+            async delay(ms) {
+                return new Promise(r => setTimeout(r, ms));
+            }
+
+            async start() {
+                this.log(`Bắt đầu - User: ${this.userName}`);
+                // Chạy vòng lặp click đơn giản
+                while (this.isRunning) {
+                    // Click vào nút Vào Game (con trỏ 1)
+                    this.click(108, 397, "Vào Game");
+                    await this.delay(2000);
+                    this.currentStep++;
+                    if (this.currentStep >= 100) break;
+                }
+            }
+        }
+
+        // ========== KHỞI TẠO 5 LUỒNG ==========
+        const threads = [];
+        for (let i = 0; i < 5; i++) {
+            const thread = new ClickThread(i);
+            threads.push(thread);
+        }
+
+        // Cập nhật trạng thái lên bảng
+        function updateStatus() {
+            const statusDiv = document.getElementById('thread-status');
+            if (statusDiv) {
+                let html = '';
+                for (let i = 0; i < threads.length; i++) {
+                    const t = threads[i];
+                    html += `<div style="margin: 2px 0;">🔹 Luồng ${i+1}: ${t.userName.substring(0,8)}... ${t.isRunning ? '🟢 RUN' : '🔴 STOP'}</div>`;
+                }
+                statusDiv.innerHTML = html;
+            }
+        }
+
+        // Nút điều khiển
+        document.getElementById('pause-all').onclick = () => {
+            threads.forEach(t => t.isRunning = false);
+            updateStatus();
+            console.log("⏸ Đã dừng tất cả luồng");
+        };
+        document.getElementById('resume-all').onclick = () => {
+            threads.forEach(t => t.isRunning = true);
+            updateStatus();
+            console.log("▶ Đã tiếp tục tất cả luồng");
+        };
+        document.getElementById('reset-all').onclick = () => {
+            threads.forEach(t => {
+                t.isRunning = true;
+                t.currentStep = 0;
+                t.userName = randomUserName();
+            });
+            updateStatus();
+            console.log("⟳ Đã reset tất cả luồng");
+        };
+
+        // Khởi động các luồng
+        for (let i = 0; i < threads.length; i++) {
+            setTimeout(() => threads[i].start(), i * 1000);
+        }
+
+        updateStatus();
+        console.log("%c✅ ĐÃ KHỞI ĐỘNG 5 LUỒNG!", "color: #00ff9d; font-size: 14px");
+        console.log("📌 Bảng điều khiển ở góc trái dưới, có thể kéo thả");
+    });
+})();
